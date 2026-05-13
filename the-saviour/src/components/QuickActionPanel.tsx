@@ -3,6 +3,7 @@
 import { AlertTriangle, Power, Radio, ShieldAlert, X } from "lucide-react";
 import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
+import { AI_CORE_URL } from "@/config/api";
 
 export function QuickActionPanel() {
   const pathname = usePathname();
@@ -19,7 +20,7 @@ export function QuickActionPanel() {
   const handleTriggerEmergency = async () => {
     setIsSubmitting(true);
     try {
-      const response = await fetch("http://localhost:8001/api/v1/alerts/trigger", {
+      const response = await fetch(`${AI_CORE_URL}/api/v1/alerts/trigger`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

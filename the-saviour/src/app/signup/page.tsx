@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { ShieldCheck, Mail, Lock, User, ArrowRight, Building, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { API_BASE_URL } from "@/config/api";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -51,7 +52,7 @@ export default function SignupPage() {
     setError("");
 
     try {
-      const response = await fetch("http://localhost:8000/register", {
+      const response = await fetch(`${API_BASE_URL}/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -69,7 +70,7 @@ export default function SignupPage() {
       setTimer(60);
     } catch (err: any) {
       if (err instanceof TypeError && err.message === "Failed to fetch") {
-        setError("Cannot connect to backend server. Please make sure the FastAPI server is running on port 8000.");
+        setError(`Cannot connect to backend server at ${API_BASE_URL}. The service may be starting up, please try again in a moment.`);
       } else {
         setError(err.message);
       }
@@ -84,7 +85,7 @@ export default function SignupPage() {
     setError("");
 
     try {
-      const response = await fetch("http://localhost:8000/verify-otp", {
+      const response = await fetch(`${API_BASE_URL}/verify-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, otp: otp.join("") }),
@@ -105,7 +106,7 @@ export default function SignupPage() {
     if (timer > 0) return;
     setLoading(true);
     try {
-      await fetch("http://localhost:8000/resend-otp", {
+      await fetch(`${API_BASE_URL}/resend-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),

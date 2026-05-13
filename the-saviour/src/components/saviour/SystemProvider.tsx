@@ -1,6 +1,7 @@
 "use client";
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { EmergencyPopup } from './EmergencyPopup';
+import { AI_CORE_WS_URL } from '@/config/api';
 
 type Role = 'main_officer' | 'sub_officer' | null;
 
@@ -60,7 +61,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     if (savedSirenMode) setSirenMode(savedSirenMode);
     
     // WebSocket for real-time alerts
-    const ws = new WebSocket('ws://localhost:8001/ws/alerts');
+    const ws = new WebSocket(AI_CORE_WS_URL);
     ws.onmessage = (event) => {
       const alert = JSON.parse(event.data);
       handleIncomingAlert(alert);

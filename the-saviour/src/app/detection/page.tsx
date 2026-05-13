@@ -2,6 +2,7 @@
 
 import { Upload, Video, Image as ImageIcon, Play, Pause, RefreshCw, Crosshair } from "lucide-react";
 import { useState, useRef } from "react";
+import { AI_CORE_URL } from "@/config/api";
 
 export default function DetectionPage() {
   const [isProcessing, setIsProcessing] = useState(false);
@@ -186,7 +187,7 @@ export default function DetectionPage() {
                           formData.append("file", file);
                           
                           try {
-                            const response = await fetch("http://localhost:8001/api/v1/detect", {
+                            const response = await fetch(`${AI_CORE_URL}/api/v1/detect`, {
                               method: "POST",
                               headers: {
                                 "Authorization": `Bearer ${localStorage.getItem("token")}`
@@ -199,7 +200,7 @@ export default function DetectionPage() {
                             } else {
                               const errorData = await response.text();
                               console.error(`Backend Error (${response.status}):`, errorData);
-                              alert(`AI Backend Error ${response.status}: Failed to connect to AI server. Please make sure the backend is running on port 8001.`);
+                              alert(`AI Backend Error ${response.status}: Failed to connect to AI server at ${AI_CORE_URL}. The service may be starting up.`);
                               setDetections([]);
                             }
                           } catch (err) {

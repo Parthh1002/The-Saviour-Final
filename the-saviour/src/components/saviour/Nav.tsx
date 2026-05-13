@@ -22,8 +22,7 @@ export function Nav() {
         </a>
 
         {/* Center: Links */}
-        <div className="hidden lg:flex items-center gap-8 text-3sm font-mono font-bold uppercase tracking-[0.2em] text-slate-500">
-          <a href="#story" className="hover:text-emerald-600 transition-colors">Story</a>
+        <div className="hidden lg:flex items-center gap-12 text-sm font-mono font-bold uppercase tracking-[0.2em] text-slate-500">
           <a href="#features" className="hover:text-emerald-600 transition-colors">Features</a>
           <a href="#methodology" className="hover:text-emerald-600 transition-colors">Method</a>
           <a href="#analytics" className="hover:text-emerald-600 transition-colors">Analytics</a>
