@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef } from "react";
 import { UploadCloud, Image as ImageIcon, Film, X, CheckCircle2, AlertCircle, RefreshCw } from "lucide-react";
+import { AI_CORE_URL } from "@/config/api";
 
 type UploadedFile = {
   id: string;
@@ -69,8 +70,8 @@ export function DataUpload() {
       formData.append("file", fileObj.file);
 
       try {
-        console.log(`DEBUG: Sending ${fileObj.file.name} to AI backend...`);
-        const response = await fetch("http://127.0.0.1:8001/api/v1/detect", {
+        console.log(`DEBUG: Sending ${fileObj.file.name} to AI backend at ${AI_CORE_URL}...`);
+        const response = await fetch(`${AI_CORE_URL}/api/v1/detect`, {
           method: "POST",
           body: formData
         });

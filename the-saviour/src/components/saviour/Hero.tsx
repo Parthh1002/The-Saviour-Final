@@ -21,7 +21,7 @@ export function Hero() {
       </div>
 
       {/* Main content */}
-      <div className="relative z-10 flex flex-col items-center text-center px-6">
+      <div className="relative z-10 flex flex-col items-center text-center px-6 pt-32 pb-12">
         {/* Live badge */}
         <div className="mb-8 flex items-center gap-3 text-[11px] md:text-xs uppercase tracking-[0.4em] text-emerald-600 font-medium opacity-0 animate-[fade-in_1s_ease_0.2s_forwards]">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
