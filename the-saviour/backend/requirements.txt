@@ -10,3 +10,4 @@ pydantic-settings
 ultralytics
 opencv-python-headless
 Pillow
+numpy
