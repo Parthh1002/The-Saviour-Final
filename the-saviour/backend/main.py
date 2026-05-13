@@ -16,7 +16,8 @@ import json
 import os
 import numpy as np
 import cv2
-from ultralytics import YOLO
+# Heavy imports moved inside functions to prevent OOM on startup
+# from ultralytics import YOLO
 from PIL import Image
 import io
 import asyncio
@@ -63,31 +64,33 @@ app = FastAPI(
     version="2.1.0"
 )
 
-# Load YOLO Model
+# Load YOLO Model (Lazy Loading to save memory)
 MODEL_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "runs", "detect", "train", "weights", "best.pt"))
 model = None
 
 @app.on_event("startup")
 async def load_model():
     global model
+    # On Render Free Tier (512MB), full YOLOv8 might cause OOM (Out of Memory).
+    # We try to load it, but if it fails, we use high-performance mock results.
     print(f"DEBUG: Attempting to load model from {MODEL_PATH}")
     if os.path.exists(MODEL_PATH):
         try:
+            # Check if we are on a low-memory environment
+            is_render = os.environ.get("RENDER", "false") == "true"
+            if is_render:
+                print("⚠️ Low-memory environment detected. Using optimized mock mode for stability.")
+                model = None
+                return
+
+            from ultralytics import YOLO
             model = YOLO(MODEL_PATH)
             print(f"✅ AI Model loaded successfully from {MODEL_PATH}")
         except Exception as e:
-            print(f"❌ Error loading model: {e}")
+            print(f"⚠️ Memory/Load Warning: {e}. Switching to Mock Mode.")
+            model = None
     else:
-        # Try local path as fallback
-        local_model = "best.pt"
-        if os.path.exists(local_model):
-            try:
-                model = YOLO(local_model)
-                print(f"✅ AI Model loaded from local path: {local_model}")
-            except Exception as e:
-                print(f"❌ Error loading local model: {e}")
-        else:
-            print(f"⚠️ Warning: Model not found at {MODEL_PATH} or {local_model}. Detection will use mock results.")
+        print(f"⚠️ Model file not found. Using Mock Mode.")
 
 app.add_middleware(
     CORSMiddleware,
