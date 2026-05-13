@@ -385,22 +385,24 @@ async def detect_objects(file: UploadFile = File(...)):
                 det_to_save["location"] = "Sector 4 - Alpha Feed"
                 det_to_save["activity_type"] = activity_type
                 
-                # 1. Try MongoDB
+                # 1. Try MongoDB (with short timeout)
                 try:
-                    await db.detections.insert_one(det_to_save)
+                    await asyncio.wait_for(db.detections.insert_one(det_to_save), timeout=1.0)
                     print(f"✅ Evidence saved to MongoDB: {name}")
                 except Exception as db_err:
                     # 2. Fallback to Local JSON File
-                    # Remove the MongoDB internal _id if it was added before failure
+                    print(f"⚠️ MongoDB unreachable/not configured, saving to local JSON: {db_err}")
+                    
+                    # Ensure _id is not an object if it exists
                     if "_id" in det_to_save:
                         det_to_save["_id"] = str(det_to_save["_id"])
                     
-                    print(f"⚠️ MongoDB unreachable, saving to local JSON: {db_err}")
                     history = []
                     if os.path.exists("detections.json"):
-                        with open("detections.json", "r") as f:
-                            try: history = json.load(f)
-                            except: history = []
+                        try:
+                            with open("detections.json", "r") as f:
+                                history = json.load(f)
+                        except: history = []
                     
                     history.insert(0, det_to_save)
                     with open("detections.json", "w") as f:
