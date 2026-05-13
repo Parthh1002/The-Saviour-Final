@@ -100,6 +100,30 @@ app.add_middleware(
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
 
+# --- Global Exception Handler ---
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    print(f"❌ GLOBAL ERROR: {str(exc)}")
+    import traceback
+    traceback.print_exc()
+    return JSONResponse(
+        status_code=500,
+        content={"message": "Internal Server Error", "detail": str(exc)},
+    )
+
+# --- Health Check ---
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "model_loaded": model is not None,
+        "mongodb": "connected" if client.admin.command('ping') else "disconnected",
+        "timestamp": time.time()
+    }
+
 # --- Database Connection ---
 client = AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=2000)
 db = client.saviour_db
