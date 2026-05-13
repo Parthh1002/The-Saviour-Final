@@ -45,15 +45,14 @@ alert_manager = ConnectionManager()
 
 
 # --- Configuration ---
-SECRET_KEY = "super-secret-saviour-key-change-in-production"
+SECRET_KEY = os.environ.get("SECRET_KEY", "super-secret-saviour-key-change-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
-MONGO_URI = "mongodb://localhost:27017"
+MONGO_URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017")
 
 # --- Gmail OTP Configuration ---
-# REPLACE THESE WITH YOUR ACTUAL GMAIL AND APP PASSWORD
-GMAIL_USER = "your-email@gmail.com"
-GMAIL_APP_PASS = "your-app-password" 
+GMAIL_USER = os.environ.get("GMAIL_USER", "your-email@gmail.com")
+GMAIL_APP_PASS = os.environ.get("GMAIL_APP_PASS", "your-app-password") 
 
 # Temporary storage for pending registrations
 pending_users = {}
@@ -71,6 +70,7 @@ model = None
 @app.on_event("startup")
 async def load_model():
     global model
+    print(f"DEBUG: Attempting to load model from {MODEL_PATH}")
     if os.path.exists(MODEL_PATH):
         try:
             model = YOLO(MODEL_PATH)
@@ -78,7 +78,16 @@ async def load_model():
         except Exception as e:
             print(f"❌ Error loading model: {e}")
     else:
-        print(f"⚠️ Warning: Model not found at {MODEL_PATH}. Detection will use mock results.")
+        # Try local path as fallback
+        local_model = "best.pt"
+        if os.path.exists(local_model):
+            try:
+                model = YOLO(local_model)
+                print(f"✅ AI Model loaded from local path: {local_model}")
+            except Exception as e:
+                print(f"❌ Error loading local model: {e}")
+        else:
+            print(f"⚠️ Warning: Model not found at {MODEL_PATH} or {local_model}. Detection will use mock results.")
 
 app.add_middleware(
     CORSMiddleware,
@@ -282,11 +291,20 @@ async def detect_objects(file: UploadFile = File(...)):
     """
     Process an uploaded image/video through your trained YOLO model for object detection.
     """
+    print(f"DEBUG: Received detection request for file: {file.filename}")
     if model is None:
+        print("DEBUG: Model is None, returning mock results")
         # Fallback to mock if model is not loaded
         time.sleep(0.5)
-        result = {"class_name": "tiger", "confidence": 0.98, "bbox": [100, 200, 50, 80], "timestamp": time.time()}
-        await db.detections.insert_one(result.copy())
+        result = {"class_name": "TIGER", "confidence": 0.98, "bbox": [100, 200, 50, 80], "timestamp": time.time()}
+        
+        # Try to save to DB with fallback
+        try:
+            await asyncio.wait_for(db.detections.insert_one(result.copy()), timeout=1.0)
+            print("✅ Mock detection saved to MongoDB")
+        except:
+            print("⚠️ Could not save mock detection to MongoDB, skipping...")
+            
         return [result]
 
     # Read image
@@ -529,4 +547,8 @@ async def trigger_alert_broadcast(alert: AlertModel):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8001, reload=True)
+    # Render automatically sets the PORT environment variable
+    port = int(os.environ.get("PORT", 8001))
+    # 0.0.0.0 allows external connections (required for Render)
+    print(f"🚀 Starting server on port {port}...")
+    uvicorn.run(app, host="0.0.0.0", port=port)
