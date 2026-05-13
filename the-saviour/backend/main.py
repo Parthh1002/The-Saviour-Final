@@ -1,0 +1,532 @@
+import time
+from datetime import datetime, timedelta
+from typing import List, Optional
+from fastapi import FastAPI, UploadFile, File, BackgroundTasks, WebSocket, HTTPException, Depends, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from pydantic import BaseModel, Field
+from motor.motor_asyncio import AsyncIOMotorClient
+from passlib.context import CryptContext
+from jose import JWTError, jwt
+import random
+import smtplib
+from email.message import EmailMessage
+from pydantic import EmailStr
+import json
+import os
+import numpy as np
+import cv2
+from ultralytics import YOLO
+from PIL import Image
+import io
+import asyncio
+
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+        print(f"DEBUG: WebSocket client connected. Total: {len(self.active_connections)}")
+
+    def disconnect(self, websocket: WebSocket):
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: dict):
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(message)
+            except:
+                pass
+
+alert_manager = ConnectionManager()
+
+
+# --- Configuration ---
+SECRET_KEY = "super-secret-saviour-key-change-in-production"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60
+MONGO_URI = "mongodb://localhost:27017"
+
+# --- Gmail OTP Configuration ---
+# REPLACE THESE WITH YOUR ACTUAL GMAIL AND APP PASSWORD
+GMAIL_USER = "your-email@gmail.com"
+GMAIL_APP_PASS = "your-app-password" 
+
+# Temporary storage for pending registrations
+pending_users = {}
+
+app = FastAPI(
+    title="The Saviour AI API",
+    description="Backend services for AI-Based Wildlife Surveillance System",
+    version="2.1.0"
+)
+
+# Load YOLO Model
+MODEL_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "runs", "detect", "train", "weights", "best.pt"))
+model = None
+
+@app.on_event("startup")
+async def load_model():
+    global model
+    if os.path.exists(MODEL_PATH):
+        try:
+            model = YOLO(MODEL_PATH)
+            print(f"✅ AI Model loaded successfully from {MODEL_PATH}")
+        except Exception as e:
+            print(f"❌ Error loading model: {e}")
+    else:
+        print(f"⚠️ Warning: Model not found at {MODEL_PATH}. Detection will use mock results.")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
+
+# --- Database Connection ---
+client = AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=2000)
+db = client.saviour_db
+
+# --- Models ---
+class UserInDB(BaseModel):
+    username: str
+    email: str
+    full_name: str
+    hashed_password: str
+    role: str = "officer"
+
+class OTPVerify(BaseModel):
+    email: str
+    otp: str
+
+class ResendOTP(BaseModel):
+    email: str
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class DetectionResult(BaseModel):
+    class_name: str
+    confidence: float
+    bbox: List[int]
+    timestamp: float
+
+class AlertModel(BaseModel):
+    alert_type: str
+    severity: str
+    location: str
+    description: str
+
+# --- Auth Utilities ---
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password):
+    return pwd_context.hash(password)
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + (expires_delta if expires_delta else timedelta(minutes=15))
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+def send_otp_email(email: str, otp: str):
+    msg = EmailMessage()
+    msg["Subject"] = "The Saviour - Account Verification Code"
+    msg["From"] = GMAIL_USER
+    msg["To"] = email
+    
+    html_content = f"""
+    <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 500px; margin: auto; padding: 30px; border: 1px solid #e2e8f0; border-radius: 16px; background: #ffffff; color: #1e293b;">
+        <div style="text-align: center; margin-bottom: 25px;">
+            <h2 style="color: #6366f1; margin: 0; font-size: 24px;">Verification Code</h2>
+            <p style="color: #64748b; font-size: 14px; margin-top: 5px;">Secure Registration System</p>
+        </div>
+        <p>Hello,</p>
+        <p>You requested access to <strong>The Saviour AI</strong>. Use the following code to verify your identity:</p>
+        <div style="text-align: center; margin: 35px 0;">
+            <span style="font-size: 38px; font-weight: 800; letter-spacing: 8px; color: #6366f1; background: #f8fafc; padding: 15px 25px; border-radius: 12px; border: 1px dashed #cbd5e1;">{otp}</span>
+        </div>
+        <p style="color: #64748b; font-size: 13px; text-align: center;">This code will expire in 10 minutes.</p>
+        <hr style="border: 0; border-top: 1px solid #f1f5f9; margin: 25px 0;">
+        <p style="font-size: 11px; color: #94a3b8; text-align: center;">If you did not request this, please ignore this email.</p>
+    </div>
+    """
+    msg.set_content(f"Your verification code is: {otp}")
+    msg.add_alternative(html_content, subtype="html")
+
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(GMAIL_USER, GMAIL_APP_PASS)
+            server.send_message(msg)
+    except Exception as e:
+        print(f"SMTP Error: {e}")
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+    
+    user = await db.users.find_one({"username": username})
+    if user is None:
+        raise credentials_exception
+    return user
+
+# --- Auth Endpoints ---
+@app.post("/api/v1/auth/register")
+async def register_user(user: UserInDB, background_tasks: BackgroundTasks):
+    # Check if username or email exists
+    existing_user = await db.users.find_one({
+        "$or": [{"username": user.username}, {"email": user.email}]
+    })
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Username or email already registered")
+    
+    # Generate 6-digit OTP
+    otp = str(random.randint(100000, 999999))
+    
+    # Hash password and store in pending
+    user_dict = user.dict()
+    user_dict["hashed_password"] = get_password_hash(user_dict["hashed_password"])
+    user_dict["otp"] = otp
+    user_dict["expires_at"] = datetime.utcnow() + timedelta(minutes=10)
+    
+    pending_users[user.email] = user_dict
+    
+    # Send email in background
+    background_tasks.add_task(send_otp_email, user.email, otp)
+    
+    return {"message": "OTP sent to email", "email": user.email}
+
+@app.post("/api/v1/auth/verify-otp")
+async def verify_otp(data: OTPVerify):
+    email = data.email
+    if email not in pending_users:
+        raise HTTPException(status_code=400, detail="Registration session expired")
+    
+    user_info = pending_users[email]
+    if user_info["otp"] != data.otp:
+        raise HTTPException(status_code=400, detail="Invalid verification code")
+    
+    if datetime.utcnow() > user_info["expires_at"]:
+        del pending_users[email]
+        raise HTTPException(status_code=400, detail="Code expired")
+    
+    # Success: Save to MongoDB
+    final_user = {
+        "username": user_info["username"],
+        "email": user_info["email"],
+        "full_name": user_info["full_name"],
+        "hashed_password": user_info["hashed_password"],
+        "role": user_info.get("role", "officer"),
+        "created_at": datetime.utcnow()
+    }
+    await db.users.insert_one(final_user)
+    del pending_users[email]
+    
+    access_token = create_access_token(data={"sub": final_user["username"]})
+    return {"access_token": access_token, "token_type": "bearer", "message": "Verification successful"}
+
+@app.post("/api/v1/auth/resend-otp")
+async def resend_otp(data: ResendOTP, background_tasks: BackgroundTasks):
+    email = data.email
+    if email not in pending_users:
+        raise HTTPException(status_code=400, detail="No active registration session found")
+    
+    otp = str(random.randint(100000, 999999))
+    pending_users[email]["otp"] = otp
+    pending_users[email]["expires_at"] = datetime.utcnow() + timedelta(minutes=10)
+    
+    background_tasks.add_task(send_otp_email, email, otp)
+    return {"message": "New verification code sent"}
+
+@app.post("/api/v1/auth/login", response_model=Token)
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = await db.users.find_one({"username": form_data.username})
+    if not user or not verify_password(form_data.password, user["hashed_password"]):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(data={"sub": user["username"]}, expires_delta=access_token_expires)
+    return {"access_token": access_token, "token_type": "bearer"}
+
+# --- Core API Endpoints ---
+@app.get("/")
+def read_root():
+    return {"status": "online", "system": "The Saviour Core API"}
+
+@app.post("/api/v1/detect", response_model=List[DetectionResult])
+async def detect_objects(file: UploadFile = File(...)):
+    """
+    Process an uploaded image/video through your trained YOLO model for object detection.
+    """
+    if model is None:
+        # Fallback to mock if model is not loaded
+        time.sleep(0.5)
+        result = {"class_name": "tiger", "confidence": 0.98, "bbox": [100, 200, 50, 80], "timestamp": time.time()}
+        await db.detections.insert_one(result.copy())
+        return [result]
+
+    # Read image
+    contents = await file.read()
+    print(f"DEBUG: Received file {file.filename}, type: {file.content_type}, size: {len(contents)} bytes")
+    
+    try:
+        # Use PIL as a more robust decoder
+        pil_img = Image.open(io.BytesIO(contents)).convert("RGB")
+        img = np.array(pil_img)
+        # Convert RGB to BGR for YOLO (OpenCV format)
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+    except Exception as e:
+        print(f"DEBUG: PIL decoding failed, falling back to OpenCV: {e}")
+        nparr = np.frombuffer(contents, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    
+    if img is None:
+        print(f"ERROR: Failed to decode image {file.filename}. Content length: {len(contents)}")
+        raise HTTPException(status_code=400, detail=f"Invalid image file: {file.filename} (could not decode)")
+
+    # Run Inference with lower threshold to be safe
+    results = model.predict(img, conf=0.1)
+    
+    detections = []
+    for r in results:
+        for box in r.boxes:
+            # Get box coordinates [x_center, y_center, width, height]
+            b = box.xywh[0].tolist() 
+            conf = float(box.conf[0])
+            cls = int(box.cls[0])
+            name = model.names[cls].upper()
+            
+            det = {
+                "class_name": name,
+                "confidence": round(conf, 4),
+                "bbox": [int(x) for x in b],
+                "timestamp": time.time()
+            }
+            detections.append(det)
+            print(f"DEBUG: Detected {name} with confidence {conf:.2f}")
+            
+            # Store in Database (with Local File Fallback)
+            try:
+                # Determine activity type
+                activity_type = "Animal Detection"
+                if any(c in name for c in ["HUMAN", "PERSON", "POACHER"]):
+                    activity_type = "Human Intrusion"
+                if any(c in name for c in ["WEAPON", "GUN", "RIFLE", "PISTOL"]):
+                    activity_type = "Threat Identified"
+
+                det_to_save = det.copy()
+                det_to_save["id"] = str(random.randint(100000, 999999))
+                det_to_save["location"] = "Sector 4 - Alpha Feed"
+                det_to_save["activity_type"] = activity_type
+                
+                # 1. Try MongoDB
+                try:
+                    await db.detections.insert_one(det_to_save)
+                    print(f"✅ Evidence saved to MongoDB: {name}")
+                except Exception as db_err:
+                    # 2. Fallback to Local JSON File
+                    # Remove the MongoDB internal _id if it was added before failure
+                    if "_id" in det_to_save:
+                        det_to_save["_id"] = str(det_to_save["_id"])
+                    
+                    print(f"⚠️ MongoDB unreachable, saving to local JSON: {db_err}")
+                    history = []
+                    if os.path.exists("detections.json"):
+                        with open("detections.json", "r") as f:
+                            try: history = json.load(f)
+                            except: history = []
+                    
+                    history.insert(0, det_to_save)
+                    with open("detections.json", "w") as f:
+                        json.dump(history[:100], f, indent=4)
+                    print(f"✅ Evidence saved to local file: {name}")
+
+            except Exception as e:
+                print(f"❌ ERROR: Failed to save evidence: {e}")
+            
+            # Broadcast alert if it's a critical detection (e.g. human, weapon)
+            # Determine alert severity and whether to trigger siren
+            critical_classes = ["WEAPON", "POACHER", "GUN", "RIFLE", "PISTOL"]
+            warning_classes = ["HUMAN", "PERSON", "VEHICLE", "CAR", "TRUCK", "VAN", "BIKE"]
+            
+            is_critical = any(c in name for c in critical_classes)
+            is_warning = any(c in name for c in warning_classes)
+
+            if (is_critical or is_warning) and conf > 0.2:
+                alert_msg = {
+                    "id": f"ALT-{random.randint(1000, 9999)}",
+                    "alert_type": f"{'CRITICAL' if is_critical else 'SECURITY'}: {name} DETECTED",
+                    "severity": "critical" if is_critical else "high",
+                    "location": "Remote Sector Feed",
+                    "description": f"AI identified a {name} with {conf:.1%} confidence.",
+                    "timestamp": time.time()
+                }
+                await alert_manager.broadcast(alert_msg)
+                
+                # Save to Alerts database/file
+                try:
+                    await db.alerts.insert_one(alert_msg.copy())
+                except:
+                    # Fallback to JSON
+                    h = []
+                    if os.path.exists("alerts.json"):
+                        with open("alerts.json", "r") as f:
+                            try: h = json.load(f)
+                            except: h = []
+                    h.insert(0, alert_msg)
+                    with open("alerts.json", "w") as f:
+                        json.dump(h[:50], f, indent=4)
+                    print(f"⚠️ Alert saved to local JSON: {alert_msg.get('title')}")
+
+    return detections
+
+@app.get("/api/v1/detections")
+async def get_detections(limit: int = 50):
+    """
+    Retrieve detection logs (Evidence) from the database or local file.
+    """
+    # 1. Try fetching from MongoDB with a strict timeout
+    try:
+        # We use wait_for to ensure we don't hang if MongoDB is dead
+        cursor = db.detections.find().sort("timestamp", -1).limit(limit)
+        results = await asyncio.wait_for(cursor.to_list(length=limit), timeout=1.5)
+        if results:
+            for r in results: r["_id"] = str(r["_id"])
+            return results
+    except Exception as e:
+        print(f"DEBUG: MongoDB fetch skipped/failed (using fallback): {e}")
+        pass
+
+    # 2. Fallback to Local JSON File
+    if os.path.exists("detections.json"):
+        with open("detections.json", "r") as f:
+            try: 
+                data = json.load(f)[:limit]
+                print(f"DEBUG: Serving {len(data)} detections from local JSON file.")
+                return data
+            except Exception as e: 
+                print(f"ERROR: Failed to load local JSON detections: {e}")
+                return []
+    
+    return []
+
+@app.get("/api/v1/alerts")
+async def get_recent_alerts():
+    """Fetch active alerts from the MongoDB database or local file."""
+    try:
+        cursor = db.alerts.find().sort("timestamp", -1).limit(50)
+        alerts = await asyncio.wait_for(cursor.to_list(length=50), timeout=1.5)
+        if alerts:
+            for alert in alerts: alert["_id"] = str(alert["_id"])
+            return alerts
+    except:
+        pass
+
+    if os.path.exists("alerts.json"):
+        with open("alerts.json", "r") as f:
+            try: return json.load(f)
+            except: return []
+    return []
+
+@app.patch("/api/v1/alerts/{alert_id}/status")
+async def update_alert_status(alert_id: str, status: str):
+    """Update the status of an alert (e.g., mark as resolved)."""
+    # 1. Try MongoDB
+    try:
+        await db.alerts.update_one({"id": alert_id}, {"$set": {"status": status}})
+    except:
+        pass
+
+    # 2. Update Local JSON File
+    if os.path.exists("alerts.json"):
+        with open("alerts.json", "r") as f:
+            try: alerts = json.load(f)
+            except: alerts = []
+        
+        updated = False
+        for a in alerts:
+            if a.get("id") == alert_id:
+                a["status"] = status
+                updated = True
+        
+        if updated:
+            with open("alerts.json", "w") as f:
+                json.dump(alerts, f, indent=4)
+    
+    return {"status": "success", "message": f"Alert {alert_id} set to {status}"}
+
+@app.post("/api/v1/alerts")
+async def create_alert(alert: AlertModel, background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
+    """Generate an alert and trigger notifications."""
+    alert_dict = alert.dict()
+    alert_dict["timestamp"] = datetime.utcnow()
+    await db.alerts.insert_one(alert_dict)
+    return {"status": "Alert triggered and stored in MongoDB"}
+
+@app.get("/api/v1/analytics")
+async def get_analytics(timeframe: str = "7d", current_user: dict = Depends(get_current_user)):
+    """Fetch aggregated wildlife detection statistics."""
+    # Mocking aggregation for now
+    return {"elephants_detected": 1240, "tigers_detected": 430, "human_intrusions": 12}
+
+@app.websocket("/ws/alerts")
+async def websocket_alerts(websocket: WebSocket):
+    """
+    WebSocket endpoint for broadcasting real-time threat alerts to all connected officers.
+    """
+    await alert_manager.connect(websocket)
+    try:
+        while True:
+            # Keep connection alive
+            await websocket.receive_text()
+    except:
+        alert_manager.disconnect(websocket)
+
+@app.post("/api/v1/alerts/trigger")
+async def trigger_alert_broadcast(alert: AlertModel):
+    """
+    Simulate or trigger an AI detection event and broadcast it to all connected clients.
+    """
+    alert_dict = alert.dict()
+    alert_dict["id"] = f"ALT-{random.randint(1000, 9999)}"
+    alert_dict["timestamp"] = datetime.utcnow().isoformat()
+    alert_dict["time"] = "Just now"
+    
+    # Broadcast to all connected WebSocket clients
+    await alert_manager.broadcast(alert_dict)
+    
+    # Also store in DB (optional fallback if DB is offline)
+    try:
+        await db.alerts.insert_one(alert_dict.copy())
+    except Exception as e:
+        print(f"Database insertion failed (ignoring for broadcast): {e}")
+    
+    return {"status": "broadcasted", "alert": alert_dict}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8001, reload=True)

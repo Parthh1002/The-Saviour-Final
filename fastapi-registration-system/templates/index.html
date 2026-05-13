@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Registration | Guardian AI</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Registration Form -->
+        <div id="register-card" class="card">
+            <h1>Create Account</h1>
+            <p class="subtitle">Join the Guardian AI community today</p>
+            
+            <div id="register-msg" class="message hidden"></div>
+
+            <form id="register-form">
+                <div class="form-group">
+                    <label for="fullname">Full Name</label>
+                    <input type="text" id="fullname" name="fullname" placeholder="John Doe" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="email">Email Address</label>
+                    <input type="email" id="email" name="email" placeholder="john@example.com" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <div class="input-wrapper">
+                        <input type="password" id="password" name="password" placeholder="••••••••" required>
+                        <button type="button" class="password-toggle" onclick="togglePassword('password')">Show</button>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="confirm_password">Confirm Password</label>
+                    <div class="input-wrapper">
+                        <input type="password" id="confirm_password" name="confirm_password" placeholder="••••••••" required>
+                        <button type="button" class="password-toggle" onclick="togglePassword('confirm_password')">Show</button>
+                    </div>
+                </div>
+                
+                <button type="submit" id="register-btn" class="btn">
+                    <span>Create Account</span>
+                </button>
+            </form>
+        </div>
+
+        <!-- OTP Verification Card -->
+        <div id="otp-card" class="card hidden">
+            <h1>Verify Email</h1>
+            <p class="subtitle">We've sent a 6-digit code to <span id="display-email" style="color: white; font-weight: 600;"></span></p>
+            
+            <div id="otp-msg" class="message hidden"></div>
+
+            <form id="otp-form">
+                <div class="otp-inputs">
+                    <input type="text" class="otp-field" maxlength="1" pattern="\d*" required>
+                    <input type="text" class="otp-field" maxlength="1" pattern="\d*" required>
+                    <input type="text" class="otp-field" maxlength="1" pattern="\d*" required>
+                    <input type="text" class="otp-field" maxlength="1" pattern="\d*" required>
+                    <input type="text" class="otp-field" maxlength="1" pattern="\d*" required>
+                    <input type="text" class="otp-field" maxlength="1" pattern="\d*" required>
+                </div>
+                
+                <button type="submit" id="verify-btn" class="btn">
+                    <span>Verify OTP</span>
+                </button>
+            </form>
+
+            <div class="resend-box">
+                <p style="font-size: 0.85rem; color: var(--text-muted);">
+                    Didn't receive the code? 
+                    <span id="resend-link" class="resend-link" onclick="handleResend()">Resend</span>
+                    <span id="resend-timer" class="hidden">in 60s</span>
+                </p>
+            </div>
+        </div>
+
+        <!-- Success Card -->
+        <div id="success-card" class="card hidden">
+            <div class="success-icon">
+                <span class="check-mark">✓</span>
+            </div>
+            <h1>Verified!</h1>
+            <p class="subtitle">Your account has been successfully created. You can now log in to your dashboard.</p>
+            <button class="btn" onclick="window.location.reload()">Return to Login</button>
+        </div>
+    </div>
+
+    <script>
+        let userEmail = "";
+
+        // Toggle Password Visibility
+        function togglePassword(id) {
+            const input = document.getElementById(id);
+            const btn = input.nextElementSibling;
+            if (input.type === "password") {
+                input.type = "text";
+                btn.textContent = "Hide";
+            } else {
+                input.type = "password";
+                btn.textContent = "Show";
+            }
+        }
+
+        // Handle OTP Inputs focus movement
+        const otpFields = document.querySelectorAll('.otp-field');
+        otpFields.forEach((field, index) => {
+            field.addEventListener('input', (e) => {
+                if (e.target.value && index < otpFields.length - 1) {
+                    otpFields[index + 1].focus();
+                }
+            });
+            field.addEventListener('keydown', (e) => {
+                if (e.key === 'Backspace' && !e.target.value && index > 0) {
+                    otpFields[index - 1].focus();
+                }
+            });
+        });
+
+        // Registration Submission
+        document.getElementById('register-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('register-btn');
+            const msg = document.getElementById('register-msg');
+            
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData.entries());
+
+            if (data.password !== data.confirm_password) {
+                showMsg(msg, "Passwords do not match", "error");
+                return;
+            }
+
+            setLoading(btn, true);
+            msg.classList.add('hidden');
+
+            try {
+                const response = await fetch('/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+
+                if (response.ok) {
+                    userEmail = data.email;
+                    document.getElementById('display-email').textContent = userEmail;
+                    document.getElementById('register-card').classList.add('hidden');
+                    document.getElementById('otp-card').classList.remove('hidden');
+                    startResendTimer();
+                } else {
+                    showMsg(msg, result.detail || "Registration failed", "error");
+                }
+            } catch (err) {
+                showMsg(msg, "Connection error. Please check backend.", "error");
+            } finally {
+                setLoading(btn, false);
+            }
+        });
+
+        // OTP Verification Submission
+        document.getElementById('otp-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('verify-btn');
+            const msg = document.getElementById('otp-msg');
+            
+            const otp = Array.from(otpFields).map(f => f.value).join('');
+            if (otp.length < 6) return;
+
+            setLoading(btn, true);
+            msg.classList.add('hidden');
+
+            try {
+                const response = await fetch('/verify-otp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: userEmail, otp: otp })
+                });
+                const result = await response.json();
+
+                if (response.ok) {
+                    document.getElementById('otp-card').classList.add('hidden');
+                    document.getElementById('success-card').classList.remove('hidden');
+                } else {
+                    showMsg(msg, result.detail || "Invalid OTP", "error");
+                }
+            } catch (err) {
+                showMsg(msg, "Verification error", "error");
+            } finally {
+                setLoading(btn, false);
+            }
+        });
+
+        // Resend OTP
+        async function handleResend() {
+            const link = document.getElementById('resend-link');
+            if (link.classList.contains('disabled')) return;
+
+            const msg = document.getElementById('otp-msg');
+            showMsg(msg, "Sending new OTP...", "success");
+
+            try {
+                const response = await fetch('/resend-otp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: userEmail })
+                });
+                if (response.ok) {
+                    showMsg(msg, "New OTP sent successfully", "success");
+                    startResendTimer();
+                } else {
+                    showMsg(msg, "Failed to resend OTP", "error");
+                }
+            } catch (err) {
+                showMsg(msg, "Resend failed", "error");
+            }
+        }
+
+        // Helpers
+        function showMsg(el, text, type) {
+            el.textContent = text;
+            el.className = `message ${type}`;
+        }
+
+        function setLoading(btn, isLoading) {
+            const span = btn.querySelector('span');
+            if (isLoading) {
+                btn.disabled = true;
+                btn.innerHTML = '<div class="spinner"></div>';
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = `<span>${span ? span.textContent : 'Submit'}</span>`;
+            }
+        }
+
+        function startResendTimer() {
+            const link = document.getElementById('resend-link');
+            const timer = document.getElementById('resend-timer');
+            let timeLeft = 60;
+
+            link.classList.add('disabled');
+            timer.classList.remove('hidden');
+
+            const interval = setInterval(() => {
+                timeLeft--;
+                timer.textContent = `in ${timeLeft}s`;
+                if (timeLeft <= 0) {
+                    clearInterval(interval);
+                    link.classList.remove('disabled');
+                    timer.classList.add('hidden');
+                }
+            }, 1000);
+        }
+    </script>
+</body>
+</html>
