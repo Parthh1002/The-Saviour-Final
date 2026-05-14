@@ -51,9 +51,9 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 MONGO_URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017")
 
-# --- Gmail OTP Configuration ---
-GMAIL_USER = os.environ.get("GMAIL_USER", "your-email@gmail.com")
-GMAIL_APP_PASS = os.environ.get("GMAIL_APP_PASS", "your-app-password") 
+# --- Gmail OTP Configuration (Hardcoded as requested) ---
+GMAIL_USER = "jhondoe.11012@gmail.com"
+GMAIL_APP_PASS = "sjxnyoyopledehvk" # Cleaned spaces from provided password
 
 # Temporary storage for pending registrations
 pending_users = {}
