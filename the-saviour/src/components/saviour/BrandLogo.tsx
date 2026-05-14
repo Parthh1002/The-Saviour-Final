@@ -18,7 +18,7 @@ export function BrandLogo({ size = "normal" }: { size?: "normal" | "large" }) {
       </div>
 
       {/* Bold Minimalist Typography */}
-      <span className="font-display text-4xl md:text-5xl font-bold tracking-tight text-emerald-800 leading-none mt-[-15px]">
+      <span className="font-display text-2xl md:text-3xl font-bold tracking-tight text-emerald-800 leading-none">
         The Saviour
       </span>
     </div>

@@ -90,6 +90,17 @@ body {
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
   scroll-behavior: smooth;
+  /* Prevent text from overlapping on mobile */
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Fluid Typography for better responsiveness */
+@layer base {
+  h1 { @apply text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight; }
+  h2 { @apply text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight; }
+  h3 { @apply text-xl md:text-2xl font-semibold; }
+  p { @apply leading-relaxed; }
 }
 
 /* Glassmorphism utility - Dark Forest Theme */
@@ -268,5 +279,24 @@ body {
     linear-gradient(to right, rgba(0,0,0,0.05) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(0,0,0,0.05) 1px, transparent 1px);
   background-size: 40px 40px;
+}
+
+/* Mobile Responsive Fixes */
+@media (max-width: 768px) {
+  .section-padding { padding-top: 3rem; padding-bottom: 3rem; }
+  .container-padding { padding-left: 1.5rem; padding-right: 1.5rem; }
+  .mobile-text-center { text-align: center; }
+}
+
+/* Smooth Entrance Animations */
+.fade-up {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.fade-up.visible {
+  opacity: 1;
+  transform: translateY(0);
 }
 
