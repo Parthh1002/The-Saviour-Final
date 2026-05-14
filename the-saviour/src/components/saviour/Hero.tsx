@@ -31,12 +31,12 @@ export function Hero() {
         <h1
           className="
             font-display
-            text-5xl
-            sm:text-7xl
-            md:text-8xl
+            text-4xl
+            sm:text-6xl
+            md:text-7xl
             lg:text-[6rem]
             font-bold
-            leading-[1.35]
+            leading-[1.2]
             tracking-tight
             text-center
             bg-[linear-gradient(90deg,_#02122e_0%,_#0b1f4d_25%,_#12b886_50%,_#0b1f4d_75%,_#02122e_100%)]
@@ -45,6 +45,8 @@ export function Hero() {
             text-transparent
             opacity-0
             animate-[wildlifeGradient_6s_ease_infinite,fade-in_1.2s_var(--ease-out-expo)_0.75s_forwards]
+            break-words
+            px-2
           "
         >
           Protecting Wildlife

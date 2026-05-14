@@ -36,7 +36,9 @@ export function VideoFrame() {
               muted 
               loop 
               playsInline
+              preload="auto"
               className="w-full h-full object-cover opacity-80"
+              style={{ filter: 'brightness(0.8) contrast(1.1)' }}
             >
               <source src="/videos/Drone.mp4" type="video/mp4" />
             </video>
