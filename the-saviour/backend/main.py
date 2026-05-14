@@ -329,6 +329,15 @@ async def resend_otp(data: ResendOTP, background_tasks: BackgroundTasks):
     background_tasks.add_task(send_otp_email, email, otp)
     return {"message": "New verification code sent"}
 
+@app.get("/api/v1/auth/test-email")
+async def test_email(background_tasks: BackgroundTasks):
+    """Visit this URL to test if your Gmail credentials are working: 
+       https://saviour-ai-core.onrender.com/api/v1/auth/test-email
+    """
+    otp = "123456"
+    background_tasks.add_task(send_otp_email, GMAIL_USER, otp)
+    return {"message": f"Test email triggered to {GMAIL_USER}. Check your Inbox and Spam."}
+
 @app.post("/api/v1/auth/login", response_model=Token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     user = await db.users.find_one({"username": form_data.username})

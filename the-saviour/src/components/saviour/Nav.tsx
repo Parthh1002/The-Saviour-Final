@@ -33,16 +33,16 @@ export function Nav() {
         </div>
 
         {/* Right: Actions (Desktop) */}
-        <div className="hidden md:flex items-center gap-3">
+        <div className="hidden md:flex items-center gap-2">
           <a
             href="/signup"
-            className="flex items-center justify-center px-6 py-2 rounded-lg bg-emerald-800 text-white text-[11px] font-mono font-bold uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-md active:scale-95"
+            className="flex items-center justify-center px-4 py-1.5 rounded-md bg-emerald-800 text-white text-[10px] font-mono font-bold uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-sm active:scale-95"
           >
             Register
           </a>
           <a
             href="/login"
-            className="flex items-center justify-center px-6 py-2 rounded-lg border border-slate-200 text-slate-600 text-[11px] font-mono font-bold uppercase tracking-widest hover:bg-slate-50 transition-all active:scale-95"
+            className="flex items-center justify-center px-4 py-1.5 rounded-md border border-slate-200 text-slate-600 text-[10px] font-mono font-bold uppercase tracking-widest hover:bg-slate-50 transition-all active:scale-95"
           >
             Officer Login
           </a>
