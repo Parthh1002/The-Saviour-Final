@@ -65,32 +65,45 @@ app = FastAPI(
 )
 
 # Load YOLO Model (Lazy Loading to save memory)
-MODEL_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "runs", "detect", "train", "weights", "best.pt"))
+# We check multiple possible locations for the model file
+MODEL_PATH_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "runs", "detect", "train", "weights", "best.pt"))
+MODEL_PATH_LOCAL = os.path.abspath(os.path.join(os.path.dirname(__file__), "models", "best.pt"))
 model = None
 
 @app.on_event("startup")
 async def load_model():
     global model
-    # On Render Free Tier (512MB), full YOLOv8 might cause OOM (Out of Memory).
-    # We try to load it, but if it fails, we use high-performance mock results.
-    print(f"DEBUG: Attempting to load model from {MODEL_PATH}")
-    if os.path.exists(MODEL_PATH):
+    
+    # Try multiple paths
+    paths_to_check = [MODEL_PATH_ROOT, MODEL_PATH_LOCAL]
+    selected_path = None
+    
+    print(f"DEBUG: Startup - Current Working Directory: {os.getcwd()}")
+    
+    for path in paths_to_check:
+        print(f"DEBUG: Checking for model at: {path}")
+        if os.path.exists(path):
+            selected_path = path
+            break
+            
+    if selected_path:
         try:
-            # Check if we are on a low-memory environment
             is_render = os.environ.get("RENDER", "false") == "true"
             if is_render:
-                print("⚠️ Low-memory environment detected. Using optimized mock mode for stability.")
-                model = None
-                return
+                print("🚀 Render environment detected. Attempting to load AI model...")
 
             from ultralytics import YOLO
-            model = YOLO(MODEL_PATH)
-            print(f"✅ AI Model loaded successfully from {MODEL_PATH}")
+            model = YOLO(selected_path)
+            print(f"✅ AI Model loaded successfully from {selected_path}")
+            print(f"DEBUG: Model classes: {model.names}")
         except Exception as e:
-            print(f"⚠️ Memory/Load Warning: {e}. Switching to Mock Mode.")
+            print(f"❌ Error loading model: {e}")
+            import traceback
+            traceback.print_exc()
             model = None
     else:
-        print(f"⚠️ Model file not found. Using Mock Mode.")
+        print(f"⚠️ Model file not found in any of these locations: {paths_to_check}")
+        print(f"⚠️ Using Mock Mode for now.")
 
 app.add_middleware(
     CORSMiddleware,
@@ -320,10 +333,12 @@ async def detect_objects(file: UploadFile = File(...)):
     """
     print(f"DEBUG: Received detection request for file: {file.filename}")
     if model is None:
-        print("DEBUG: Model is None, returning mock results")
-        # Fallback to mock if model is not loaded
+        print("DEBUG: Model is None, returning randomized mock results")
+        # Fallback to mock if model is not loaded (e.g. OOM or file missing)
         time.sleep(0.5)
-        result = {"class_name": "TIGER", "confidence": 0.98, "bbox": [100, 200, 50, 80], "timestamp": time.time()}
+        mock_classes = ["TIGER", "ELEPHANT", "DEER", "HUMAN"]
+        selected_class = random.choice(mock_classes)
+        result = {"class_name": selected_class, "confidence": round(random.uniform(0.85, 0.99), 2), "bbox": [100, 200, 50, 80], "timestamp": time.time()}
         
         # Try to save to DB with fallback
         try:
