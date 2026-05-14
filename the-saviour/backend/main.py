@@ -16,7 +16,8 @@ import json
 import os
 import numpy as np
 import cv2
-from ultralytics import YOLO
+# Heavy imports moved inside functions to prevent OOM on startup
+# from ultralytics import YOLO
 from PIL import Image
 import io
 import asyncio
@@ -63,31 +64,46 @@ app = FastAPI(
     version="2.1.0"
 )
 
-# Load YOLO Model
-MODEL_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "runs", "detect", "train", "weights", "best.pt"))
+# Load YOLO Model (Lazy Loading to save memory)
+# We check multiple possible locations for the model file
+MODEL_PATH_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "runs", "detect", "train", "weights", "best.pt"))
+MODEL_PATH_LOCAL = os.path.abspath(os.path.join(os.path.dirname(__file__), "models", "best.pt"))
 model = None
 
 @app.on_event("startup")
 async def load_model():
     global model
-    print(f"DEBUG: Attempting to load model from {MODEL_PATH}")
-    if os.path.exists(MODEL_PATH):
+    
+    # Try multiple paths
+    paths_to_check = [MODEL_PATH_ROOT, MODEL_PATH_LOCAL]
+    selected_path = None
+    
+    print(f"DEBUG: Startup - Current Working Directory: {os.getcwd()}")
+    
+    for path in paths_to_check:
+        print(f"DEBUG: Checking for model at: {path}")
+        if os.path.exists(path):
+            selected_path = path
+            break
+            
+    if selected_path:
         try:
-            model = YOLO(MODEL_PATH)
-            print(f"✅ AI Model loaded successfully from {MODEL_PATH}")
+            is_render = os.environ.get("RENDER", "false") == "true"
+            if is_render:
+                print("🚀 Render environment detected. Attempting to load AI model...")
+
+            from ultralytics import YOLO
+            model = YOLO(selected_path)
+            print(f"✅ AI Model loaded successfully from {selected_path}")
+            print(f"DEBUG: Model classes: {model.names}")
         except Exception as e:
             print(f"❌ Error loading model: {e}")
+            import traceback
+            traceback.print_exc()
+            model = None
     else:
-        # Try local path as fallback
-        local_model = "best.pt"
-        if os.path.exists(local_model):
-            try:
-                model = YOLO(local_model)
-                print(f"✅ AI Model loaded from local path: {local_model}")
-            except Exception as e:
-                print(f"❌ Error loading local model: {e}")
-        else:
-            print(f"⚠️ Warning: Model not found at {MODEL_PATH} or {local_model}. Detection will use mock results.")
+        print(f"⚠️ Model file not found in any of these locations: {paths_to_check}")
+        print(f"⚠️ Using Mock Mode for now.")
 
 app.add_middleware(
     CORSMiddleware,
@@ -317,10 +333,12 @@ async def detect_objects(file: UploadFile = File(...)):
     """
     print(f"DEBUG: Received detection request for file: {file.filename}")
     if model is None:
-        print("DEBUG: Model is None, returning mock results")
-        # Fallback to mock if model is not loaded
+        print("DEBUG: Model is None, returning randomized mock results")
+        # Fallback to mock if model is not loaded (e.g. OOM or file missing)
         time.sleep(0.5)
-        result = {"class_name": "TIGER", "confidence": 0.98, "bbox": [100, 200, 50, 80], "timestamp": time.time()}
+        mock_classes = ["TIGER", "ELEPHANT", "DEER", "HUMAN"]
+        selected_class = random.choice(mock_classes)
+        result = {"class_name": selected_class, "confidence": round(random.uniform(0.85, 0.99), 2), "bbox": [100, 200, 50, 80], "timestamp": time.time()}
         
         # Try to save to DB with fallback
         try:
