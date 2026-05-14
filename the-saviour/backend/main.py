@@ -111,6 +111,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -215,11 +216,20 @@ def send_otp_email(email: str, otp: str):
     msg.add_alternative(html_content, subtype="html")
 
     try:
+        # Log OTP to console for debugging/testing
+        print(f"📧 [OTP DEBUG] Verification code for {email}: {otp}")
+        
+        # Check if credentials are set
+        if GMAIL_USER == "your-email@gmail.com" or not GMAIL_APP_PASS:
+            print("⚠️ SMTP Warning: Gmail credentials not configured. Email will not be sent.")
+            return
+
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(GMAIL_USER, GMAIL_APP_PASS)
             server.send_message(msg)
+            print(f"✅ Email sent to {email}")
     except Exception as e:
-        print(f"SMTP Error: {e}")
+        print(f"❌ SMTP Error: {e}")
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(
@@ -350,8 +360,14 @@ async def detect_objects(file: UploadFile = File(...)):
         return [result]
 
     # Read image
-    contents = await file.read()
-    print(f"DEBUG: Received file {file.filename}, type: {file.content_type}, size: {len(contents)} bytes")
+    try:
+        contents = await file.read()
+        if not contents:
+            raise HTTPException(status_code=400, detail="Empty file uploaded")
+        print(f"DEBUG: Received file {file.filename}, size: {len(contents)} bytes")
+    except Exception as e:
+        print(f"❌ Read Error: {e}")
+        raise HTTPException(status_code=400, detail="Could not read uploaded file")
     
     try:
         # Use PIL as a more robust decoder
@@ -368,8 +384,19 @@ async def detect_objects(file: UploadFile = File(...)):
         print(f"ERROR: Failed to decode image {file.filename}. Content length: {len(contents)}")
         raise HTTPException(status_code=400, detail=f"Invalid image file: {file.filename} (could not decode)")
 
-    # Run Inference with lower threshold to be safe
-    results = model.predict(img, conf=0.1)
+    # Run Inference with optimization
+    try:
+        # Resize image for faster inference if it's too large
+        h, w = img.shape[:2]
+        if max(h, w) > 1024:
+            scale = 1024 / max(h, w)
+            img = cv2.resize(img, (int(w * scale), int(h * scale)))
+            print(f"DEBUG: Resized image to {img.shape[1]}x{img.shape[0]} for speed")
+
+        results = model.predict(img, conf=0.1, imgsz=640)
+    except Exception as e:
+        print(f"❌ Inference Error: {e}")
+        raise HTTPException(status_code=500, detail="AI Model failed to process image")
     
     detections = []
     for r in results:
