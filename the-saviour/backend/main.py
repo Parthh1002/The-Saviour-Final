@@ -224,13 +224,23 @@ def send_otp_email(email: str, otp: str):
             print("❌ SMTP ERROR: Gmail credentials NOT configured! Please set GMAIL_USER and GMAIL_APP_PASS in Render Environment Variables.")
             return
 
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.set_debuglevel(1)  # Enable debug for detailed logs
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.set_debuglevel(1)
+            server.starttls() # Secure the connection
             server.login(GMAIL_USER, GMAIL_APP_PASS)
             server.send_message(msg)
             print(f"✅ Email SUCCESS: OTP sent to {email}")
     except Exception as e:
         print(f"❌ SMTP CRITICAL ERROR: {str(e)}")
+        # Fallback to 465 if 587 fails
+        try:
+            print("🔄 Attempting fallback to Port 465...")
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+                server.login(GMAIL_USER, GMAIL_APP_PASS)
+                server.send_message(msg)
+                print(f"✅ Email SUCCESS (via 465): OTP sent to {email}")
+        except Exception as e2:
+            print(f"❌ SMTP FALLBACK FAILED: {str(e2)}")
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(
