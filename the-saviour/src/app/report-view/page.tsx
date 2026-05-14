@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
 
 const COLORS = ['#0B6623', '#ef4444', '#f59e0b'];
 
-export default function ReportViewPage() {
+function ReportViewContent() {
   const searchParams = useSearchParams();
   const id = searchParams.get("id");
   const [data, setData] = useState<any>(null);
@@ -131,6 +131,14 @@ export default function ReportViewPage() {
       </div>
 
     </div>
+  );
+}
+
+export default function ReportViewPage() {
+  return (
+    <Suspense fallback={<div className="p-10 font-mono text-xs">Loading report data for PDF engine...</div>}>
+      <ReportViewContent />
+    </Suspense>
   );
 }
 
