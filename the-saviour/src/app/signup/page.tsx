@@ -52,7 +52,6 @@ export default function SignupPage() {
     setError("");
 
     try {
-      // Ensure we are sending EXACTLY what the backend UserRegister model expects
       const payload = {
         full_name: formData.fullname,
         username: formData.username,
@@ -61,43 +60,36 @@ export default function SignupPage() {
         role: "officer"
       };
       
-      console.log("DEBUG: Sending Payload:", payload);
+      console.log("DEBUG: Fetching from:", `${API_BASE_URL}/api/v1/auth/register`);
+      console.log("DEBUG: Payload:", payload);
 
       const response = await fetch(`${API_BASE_URL}/api/v1/auth/register`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
         body: JSON.stringify(payload),
       });
 
+      console.log("DEBUG: Response Status:", response.status);
       const data = await response.json();
-      console.log("DEBUG: Backend Response:", data);
+      console.log("DEBUG: Response Data:", data);
 
       if (!response.ok) {
-        let errorMsg = "Registration failed";
-        if (data.detail) {
-          if (Array.isArray(data.detail)) {
-            errorMsg = data.detail.map((d: any) => d.msg || JSON.stringify(d)).join(", ");
-          } else if (typeof data.detail === 'object') {
-            errorMsg = data.detail.message || data.detail.msg || JSON.stringify(data.detail);
-          } else {
-            errorMsg = data.detail;
-          }
-        }
-        throw new Error(errorMsg);
+        throw new Error(data.detail || `Server error: ${response.status}`);
       }
 
       setEmail(formData.email);
       setStep("otp");
       setTimer(60);
     } catch (err: any) {
+      console.error("DEBUG: Signup Error Trace:", err);
+      
       if (err instanceof TypeError && err.message === "Failed to fetch") {
-        setError(`Cannot connect to backend server at ${API_BASE_URL}. The service may be starting up, please try again in a moment.`);
+        setError(`Cannot connect to server at ${API_BASE_URL}. Possible reasons: 1. Server sleeping on Render (wait 1 min). 2. CORS Block. 3. Network offline.`);
       } else {
-        // If the error message is an object (common with FastAPI validation), stringify it
-        const errorMessage = typeof err.message === 'object' 
-          ? JSON.stringify(err.message) 
-          : err.message;
-        setError(errorMessage);
+        setError(err.message || "An unexpected error occurred during registration.");
       }
     } finally {
       setLoading(false);
@@ -155,7 +147,7 @@ export default function SignupPage() {
           <p className="text-secondary mb-8">Your account access has been approved and verified. You can now sign in.</p>
           <button 
             onClick={() => router.push("/login")}
-            className="w-full bg-accent text-white py-3 rounded-lg font-medium shadow-[var(--shadow-glow-blue)] hover:bg-accent/90 transition-all"
+            className="w-full bg-accent text-white py-3 rounded-lg font-medium shadow-[0_0_20px_rgba(59,130,246,0.3)] hover:bg-accent/90 transition-all"
           >
             Go to Login
           </button>
@@ -168,7 +160,7 @@ export default function SignupPage() {
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4 py-12">
       <div className="w-full max-w-md">
         <div className="text-center mb-8 animate-fade-in">
-          <div className="inline-flex items-center justify-center h-16 w-16 rounded-2xl bg-accent/10 mb-4 shadow-[var(--shadow-glow-blue)]">
+          <div className="inline-flex items-center justify-center h-16 w-16 rounded-2xl bg-accent/10 mb-4 shadow-[0_0_20px_rgba(59,130,246,0.2)]">
             <ShieldCheck className="h-8 w-8 text-accent" />
           </div>
           <h1 className="text-3xl font-bold mb-2">
@@ -258,7 +250,7 @@ export default function SignupPage() {
               <button 
                 type="submit" 
                 disabled={loading}
-                className="w-full bg-accent text-white py-2.5 rounded-lg font-medium shadow-[var(--shadow-glow-blue)] hover:bg-accent/90 disabled:opacity-50 transition-all flex items-center justify-center gap-2 mt-4"
+                className="w-full bg-accent text-white py-2.5 rounded-lg font-medium shadow-[0_0_20px_rgba(59,130,246,0.3)] hover:bg-accent/90 disabled:opacity-50 transition-all flex items-center justify-center gap-2 mt-4"
               >
                 {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Register"}
                 {!loading && <ArrowRight className="h-4 w-4" />}
@@ -284,7 +276,7 @@ export default function SignupPage() {
               <button 
                 type="submit" 
                 disabled={loading || otp.some(d => !d)}
-                className="w-full bg-accent text-white py-3 rounded-lg font-medium shadow-[var(--shadow-glow-blue)] hover:bg-accent/90 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                className="w-full bg-accent text-white py-3 rounded-lg font-medium shadow-[0_0_20px_rgba(59,130,246,0.3)] hover:bg-accent/90 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
               >
                 {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Verify & Complete"}
               </button>
