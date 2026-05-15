@@ -107,12 +107,21 @@ async def load_model():
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https://.*\.vercel\.app|http://localhost:3000|https://the-saviour-final\.vercel\.app",
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
 )
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    print(f"🔍 DEBUG: {request.method} {request.url} | Origin: {request.headers.get('origin')}")
+    return await call_next(request)
+
+@app.get("/")
+async def root():
+    return {"message": "The Saviour AI Backend is Live", "status": "healthy"}
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
