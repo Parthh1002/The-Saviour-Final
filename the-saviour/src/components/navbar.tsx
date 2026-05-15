@@ -38,7 +38,7 @@ export function Navbar() {
   if (hideNavbarPaths.includes(normalizedPathname)) return null;
 
   return (
-    <nav className="sticky top-0 z-50 w-full glass border-b border-border/50">
+    <nav className="sticky top-0 z-50 w-full glass border-b border-border/50 transition-all pt-[env(safe-area-inset-top)]">
       <div className="flex h-16 items-center px-4 md:px-8 max-w-[1600px] mx-auto">
         <div className="flex items-center gap-2 mr-8">
           <div className="relative flex items-center justify-center h-10 w-10 rounded-lg bg-primary/10 border border-primary/30">
