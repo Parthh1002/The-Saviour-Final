@@ -64,18 +64,20 @@ export default function SignupPage() {
       });
 
       const data = await response.json();
+      console.log("DEBUG: Backend Response:", data);
+
       if (!response.ok) {
-        // Handle FastAPI validation errors (which are often arrays)
-        let detail = data.detail || "Registration failed";
-        if (typeof detail === 'object') {
-          detail = JSON.stringify(detail);
-          // Try to make it a bit more readable
-          if (detail.includes('msg')) {
-             const matches = detail.match(/"msg":"([^"]+)"/g);
-             if (matches) detail = matches.map(m => m.replace(/"msg":"|"/g, '')).join(", ");
+        let errorMsg = "Registration failed";
+        if (data.detail) {
+          if (Array.isArray(data.detail)) {
+            errorMsg = data.detail.map((d: any) => d.msg || JSON.stringify(d)).join(", ");
+          } else if (typeof data.detail === 'object') {
+            errorMsg = data.detail.message || data.detail.msg || JSON.stringify(data.detail);
+          } else {
+            errorMsg = data.detail;
           }
         }
-        throw new Error(detail);
+        throw new Error(errorMsg);
       }
 
       setEmail(formData.email);
