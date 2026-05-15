@@ -14,8 +14,11 @@ export function QuickActionPanel() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [alertSent, setAlertSent] = useState(false);
 
-  // Only show on dashboard/app routes, hide on landing page
-  if (!pathname || pathname === "/" || pathname === "/login" || pathname === "/signup") return null;
+  // Only show on dashboard/app routes, hide on landing and auth pages
+  const normalizedPathname = pathname?.replace(/\/$/, "") || "/";
+  const hidePanelPaths = ["", "/", "/login", "/signup"];
+  
+  if (hidePanelPaths.includes(normalizedPathname)) return null;
 
   const handleTriggerEmergency = async () => {
     setIsSubmitting(true);

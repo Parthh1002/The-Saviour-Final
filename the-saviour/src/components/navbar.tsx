@@ -31,7 +31,11 @@ export function Navbar() {
     }, 2000);
   };
 
-  if (pathname === "/" || pathname === "/login" || pathname === "/signup") return null;
+  // Normalize pathname to handle trailing slashes and ensure exact matching
+  const normalizedPathname = pathname?.replace(/\/$/, "") || "/";
+  const hideNavbarPaths = ["", "/", "/login", "/signup"];
+  
+  if (hideNavbarPaths.includes(normalizedPathname)) return null;
 
   return (
     <nav className="sticky top-0 z-50 w-full glass border-b border-border/50">

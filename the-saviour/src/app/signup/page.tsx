@@ -73,7 +73,11 @@ export default function SignupPage() {
       if (err instanceof TypeError && err.message === "Failed to fetch") {
         setError(`Cannot connect to backend server at ${API_BASE_URL}. The service may be starting up, please try again in a moment.`);
       } else {
-        setError(err.message);
+        // If the error message is an object (common with FastAPI validation), stringify it
+        const errorMessage = typeof err.message === 'object' 
+          ? JSON.stringify(err.message) 
+          : err.message;
+        setError(errorMessage);
       }
     } finally {
       setLoading(false);
