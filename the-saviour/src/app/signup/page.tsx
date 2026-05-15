@@ -52,15 +52,21 @@ export default function SignupPage() {
     setError("");
 
     try {
+      // Ensure we are sending EXACTLY what the backend UserRegister model expects
+      const payload = {
+        full_name: formData.fullname,
+        username: formData.username,
+        email: formData.email,
+        password: formData.password,
+        role: "officer"
+      };
+      
+      console.log("DEBUG: Sending Payload:", payload);
+
       const response = await fetch(`${API_BASE_URL}/api/v1/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          full_name: formData.fullname,
-          username: formData.username,
-          email: formData.email,
-          password: formData.password,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await response.json();
