@@ -160,10 +160,13 @@ class UserInDB(BaseModel):
 
 class UserRegister(BaseModel):
     username: str
-    email: EmailStr
+    email: str  # Changed from EmailStr to str for flexibility
     full_name: str
     password: str
     role: str = "officer"
+
+    class Config:
+        extra = "allow" # Allow extra fields if any are sent by mistake
 
 class OTPVerify(BaseModel):
     email: str
@@ -658,8 +661,15 @@ async def trigger_alert_broadcast(alert: AlertModel):
 
 if __name__ == "__main__":
     import uvicorn
-    # Render automatically sets the PORT environment variable
-    port = int(os.environ.get("PORT", 8001))
-    # 0.0.0.0 allows external connections (required for Render)
-    print(f"🚀 Starting server on port {port}...")
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    import sys
+    try:
+        # Render automatically sets the PORT environment variable
+        port = int(os.environ.get("PORT", 8001))
+        # 0.0.0.0 allows external connections (required for Render)
+        print(f"🚀 Starting server on port {port}...")
+        uvicorn.run(app, host="0.0.0.0", port=port)
+    except Exception as e:
+        print(f"❌ CRITICAL STARTUP ERROR: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
