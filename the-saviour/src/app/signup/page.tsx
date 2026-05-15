@@ -64,7 +64,19 @@ export default function SignupPage() {
       });
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || "Registration failed");
+      if (!response.ok) {
+        // Handle FastAPI validation errors (which are often arrays)
+        let detail = data.detail || "Registration failed";
+        if (typeof detail === 'object') {
+          detail = JSON.stringify(detail);
+          // Try to make it a bit more readable
+          if (detail.includes('msg')) {
+             const matches = detail.match(/"msg":"([^"]+)"/g);
+             if (matches) detail = matches.map(m => m.replace(/"msg":"|"/g, '')).join(", ");
+          }
+        }
+        throw new Error(detail);
+      }
 
       setEmail(formData.email);
       setStep("otp");
