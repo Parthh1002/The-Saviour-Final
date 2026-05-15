@@ -107,12 +107,7 @@ async def load_model():
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://the-saviour-final.vercel.app",
-        "https://the-saviour-final-qvnd3fd73-parthh1002-5225s-projects.vercel.app",
-        "http://localhost:3000",
-        "http://localhost:3001",
-    ],
+    allow_origin_regex=r"https://.*\.vercel\.app|http://localhost:3000|https://the-saviour-final\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -279,6 +274,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 # --- Auth Endpoints ---
 @app.post("/api/v1/auth/register")
 async def register_user(user: UserRegister, background_tasks: BackgroundTasks):
+    print(f"📥 REGISTER REQUEST RECEIVED: {user.dict()}")
     # Check if username or email exists
     existing_user = await db.users.find_one({
         "$or": [{"username": user.username}, {"email": user.email}]
