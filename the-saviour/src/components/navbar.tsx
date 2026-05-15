@@ -31,7 +31,7 @@ export function Navbar() {
     }, 2000);
   };
 
-  if (pathname === "/" || pathname === "/login") return null;
+  if (pathname === "/" || pathname === "/login" || pathname === "/signup") return null;
 
   return (
     <nav className="sticky top-0 z-50 w-full glass border-b border-border/50">

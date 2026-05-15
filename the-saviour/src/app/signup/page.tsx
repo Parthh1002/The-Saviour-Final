@@ -52,11 +52,12 @@ export default function SignupPage() {
     setError("");
 
     try {
-      const response = await fetch(`${API_BASE_URL}/register`, {
+      const response = await fetch(`${API_BASE_URL}/api/v1/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          fullname: formData.fullname,
+          full_name: formData.fullname,
+          username: formData.username,
           email: formData.email,
           password: formData.password,
         }),
@@ -85,7 +86,7 @@ export default function SignupPage() {
     setError("");
 
     try {
-      const response = await fetch(`${API_BASE_URL}/verify-otp`, {
+      const response = await fetch(`${API_BASE_URL}/api/v1/auth/verify-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, otp: otp.join("") }),
@@ -106,7 +107,7 @@ export default function SignupPage() {
     if (timer > 0) return;
     setLoading(true);
     try {
-      await fetch(`${API_BASE_URL}/resend-otp`, {
+      await fetch(`${API_BASE_URL}/api/v1/auth/resend-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),

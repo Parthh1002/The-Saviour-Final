@@ -6,59 +6,64 @@ import { ShieldCheck, Mail, Lock, ArrowRight, Activity, Volume2, VolumeX } from 
 import { useRouter } from "next/navigation";
 import { useSystem } from "@/components/saviour/SystemProvider";
 
+import { API_BASE_URL } from "@/config/api";
+
 export default function LoginPage() {
   const { setOfficerInfo, playNotify, audioEnabled, setAudioEnabled } = useSystem();
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [reserveCode, setReserveCode] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [error, setError] = useState("");
   const [toastMsg, setToastMsg] = useState("");
   const [emailToastMsg, setEmailToastMsg] = useState("");
   const router = useRouter();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoggingIn(true);
+    setError("");
     
-    // Simulate current time
-    const currentTime = new Date().toLocaleString();
-    
-    setToastMsg(`This device logged into The Saviour at ${currentTime}`);
-    
-    // Simulate real-time email delay (10-20 seconds)
-    setTimeout(() => {
-        setEmailToastMsg("Email sent to parthh1002@gmail.com: Login detected from this device.");
-        setTimeout(() => setEmailToastMsg(""), 5000);
-    }, 15000);
+    try {
+      const formData = new URLSearchParams();
+      formData.append("username", username);
+      formData.append("password", password);
 
-    // Simulate authentication dynamically
-    setTimeout(() => {
-      setIsLoggingIn(false);
-      // Allow flexible login as long as fields are provided
-      if (email && password.length >= 6 && reserveCode) {
-        localStorage.setItem("token", "mock-jwt-token");
-        localStorage.setItem("user", email);
+      const response = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        localStorage.setItem("token", data.access_token);
+        localStorage.setItem("user", username);
         
-        // Define role based on email input
-        const officerId = email.split('@')[0].toUpperCase();
+        // Define role based on username or email
+        const officerId = username.split('@')[0].toUpperCase();
         const role = officerId.startsWith('CMD') ? 'main_officer' : 'sub_officer';
         
         setOfficerInfo(role, officerId);
-        playNotify(); // Play subtle login success notification
+        playNotify();
         router.push("/dashboard");
       } else {
-        setToastMsg("Invalid credentials. Please provide valid inputs.");
-        setTimeout(() => setToastMsg(""), 3000);
+        setError(data.detail || "Authentication failed. Please check your credentials.");
       }
-    }, 1000);
+    } catch (err: any) {
+      setError("Cannot connect to server. Please ensure the backend is running.");
+    } finally {
+      setIsLoggingIn(false);
+    }
   };
 
   return (
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4 relative">
-      {toastMsg && (
-        <div className="fixed top-20 right-8 bg-panel border border-border shadow-lg px-4 py-3 rounded-md flex items-center gap-3 z-50 animate-fade-in text-sm font-medium transition-all">
-          <div className={`h-2 w-2 rounded-full animate-pulse ${toastMsg.includes('Denied') ? 'bg-danger' : 'bg-success'}`}></div>
-          {toastMsg}
+      {error && (
+        <div className="fixed top-20 right-8 bg-panel border border-danger/50 shadow-lg px-4 py-3 rounded-md flex items-center gap-3 z-50 animate-fade-in text-sm font-medium transition-all text-danger">
+          <div className="h-2 w-2 rounded-full bg-danger animate-pulse"></div>
+          {error}
         </div>
       )}
       {emailToastMsg && (
@@ -95,11 +100,11 @@ export default function LoginPage() {
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-secondary group-focus-within:text-primary transition-colors" />
                 <input 
-                  type="email" 
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  type="text" 
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all hover:border-primary/50"
-                  placeholder="11a21278parth@gmail.com"
+                  placeholder="Officer Username or Email"
                   required
                 />
               </div>

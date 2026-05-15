@@ -153,6 +153,13 @@ class UserInDB(BaseModel):
     hashed_password: str
     role: str = "officer"
 
+class UserRegister(BaseModel):
+    username: str
+    email: EmailStr
+    full_name: str
+    password: str
+    role: str = "officer"
+
 class OTPVerify(BaseModel):
     email: str
     otp: str
@@ -263,7 +270,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
 
 # --- Auth Endpoints ---
 @app.post("/api/v1/auth/register")
-async def register_user(user: UserInDB, background_tasks: BackgroundTasks):
+async def register_user(user: UserRegister, background_tasks: BackgroundTasks):
     # Check if username or email exists
     existing_user = await db.users.find_one({
         "$or": [{"username": user.username}, {"email": user.email}]
@@ -276,7 +283,8 @@ async def register_user(user: UserInDB, background_tasks: BackgroundTasks):
     
     # Hash password and store in pending
     user_dict = user.dict()
-    user_dict["hashed_password"] = get_password_hash(user_dict["hashed_password"])
+    user_dict["hashed_password"] = get_password_hash(user_dict["password"])
+    del user_dict["password"]
     user_dict["otp"] = otp
     user_dict["expires_at"] = datetime.utcnow() + timedelta(minutes=10)
     
@@ -340,11 +348,18 @@ async def test_email(background_tasks: BackgroundTasks):
 
 @app.post("/api/v1/auth/login", response_model=Token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = await db.users.find_one({"username": form_data.username})
+    # Find user by username or email
+    user = await db.users.find_one({
+        "$or": [
+            {"username": form_data.username},
+            {"email": form_data.username}
+        ]
+    })
+    
     if not user or not verify_password(form_data.password, user["hashed_password"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
+            detail="Incorrect username/email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
