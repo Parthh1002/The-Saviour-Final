@@ -28,7 +28,7 @@ class ConnectionManager:
         self.active_connections: List[WebSocket] = []
 
     async def connect(self, websocket: WebSocket):
-        await websocket.accept()
+        # WebSocket is already accepted in the handler
         self.active_connections.append(websocket)
         print(f"DEBUG: WebSocket client connected. Total: {len(self.active_connections)}")
 
@@ -660,15 +660,18 @@ async def get_analytics(timeframe: str = "7d", current_user: dict = Depends(get_
 
 @app.websocket("/ws/alerts")
 async def websocket_alerts(websocket: WebSocket):
-    """
-    WebSocket endpoint for broadcasting real-time threat alerts to all connected officers.
-    """
+    # Allow all origins for WebSocket handshake
+    await websocket.accept()
     await alert_manager.connect(websocket)
     try:
         while True:
-            # Keep connection alive
-            await websocket.receive_text()
-    except:
+            # Keep connection alive with a tiny ping/pong or just wait
+            data = await websocket.receive_text()
+            # If client sends anything, just echo it to keep alive
+            await websocket.send_json({"type": "ping", "status": "active"})
+    except Exception as e:
+        print(f"WebSocket Error: {e}")
+    finally:
         alert_manager.disconnect(websocket)
 
 @app.post("/api/v1/alerts/trigger")
