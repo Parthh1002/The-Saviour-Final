@@ -1,31 +1,46 @@
 import os
-import json
 import random
 import smtplib
-import time
-from pathlib import Path
 from email.message import EmailMessage
-from typing import Dict, List, Optional
+from typing import Dict
 from datetime import datetime, timedelta
 
 from fastapi import FastAPI, Request, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel, EmailStr, Field
-from passlib.context import CryptContext
-
-# --- Configuration (Instructions for User) ---
-# 1. Go to Google Account -> Security -> 2-Step Verification
-# 2. At the bottom, click "App Passwords"
-# 3. Create a new app (e.g., "Registration System") and copy the 16-character code
-GMAIL_USER = "jhondoe.11012@gmail.com"  # REPLACE WITH YOUR GMAIL
-GMAIL_APP_PASS = "sjxn yoyo pled ehvk"  # REPLACE WITH YOUR APP PASSWORD
-
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, EmailStr
+from passlib.context import CryptContext
+from pathlib import Path
+from motor.motor_asyncio import AsyncIOMotorClient
+from contextlib import asynccontextmanager
+
+# --- Configuration ---
+GMAIL_USER = os.environ.get("GMAIL_USER", "jhondoe.11012@gmail.com")
+GMAIL_APP_PASS = os.environ.get("GMAIL_APP_PASSWORD", "sjxn yoyo pled ehvk")
+MONGO_URI = os.environ.get("MONGO_URI", "")
+
+# --- MongoDB Client ---
+client = None
+db = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global client, db
+    if MONGO_URI:
+        client = AsyncIOMotorClient(MONGO_URI)
+        db = client["saviour_registration"]
+        print("✅ MongoDB Connected!")
+    else:
+        print("⚠️ No MONGO_URI set. Running without persistent DB.")
+    yield
+    if client:
+        client.close()
+        print("🛑 MongoDB Disconnected.")
 
 # --- Setup ---
-app = FastAPI(title="Guardian AI Registration System")
+app = FastAPI(title="Guardian AI Registration System", lifespan=lifespan)
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -47,23 +62,26 @@ app.add_middleware(
 )
 
 BASE_DIR = Path(__file__).resolve().parent
-
-app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
-# Use pbkdf2_sha256 for better compatibility on Windows/modern systems
-pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
-DB_FILE = BASE_DIR / "users.json"
+# Mount static only if directory exists
+static_dir = BASE_DIR / "static"
+if static_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
-# In-memory temporary storage for OTP and pending user data
-# In a real production app, use Redis or a temp DB table
+# Use pbkdf2_sha256 for password hashing
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
+
+# In-memory temporary storage for pending OTP verifications
 pending_users: Dict[str, dict] = {}
 
 # --- Models ---
 class UserRegister(BaseModel):
     fullname: str
+    username: str
     email: EmailStr
     password: str
+    role: str = "officer"
 
 class OTPVerify(BaseModel):
     email: EmailStr
@@ -72,46 +90,25 @@ class OTPVerify(BaseModel):
 class ResendOTP(BaseModel):
     email: EmailStr
 
-# --- Database Utilities ---
-def load_users() -> List[dict]:
-    if not os.path.exists(DB_FILE):
-        return []
-    with open(DB_FILE, "r") as f:
-        try:
-            return json.load(f)
-        except json.JSONDecodeError:
-            return []
-
-def save_user(user_data: dict):
-    users = load_users()
-    users.append(user_data)
-    with open(DB_FILE, "w") as f:
-        json.dump(users, f, indent=4)
-
 # --- Email Logic ---
 def send_otp_email(email: str, otp: str):
     msg = EmailMessage()
     msg["Subject"] = "Verify your The Saviour Account"
     msg["From"] = GMAIL_USER
     msg["To"] = email
-    
+
     msg.set_content(f"""
     Hi there!
-    
-    Thank you for registering with The Saviour.
-    Your 6-digit verification code is: {otp}
-    
+
+    Your OTP verification code is: {otp}
+
     This code will expire in 10 minutes.
-    
-    If you didn't request this, please ignore this email.
     """)
-    
-    # Optional: HTML content for a prettier email
+
     msg.add_alternative(f"""
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;">
-        <h2 style="color: #6366f1; text-align: center;">The Saviour Verification</h2>
-        <p>Hi there!</p>
-        <p>Thank you for registering with The Saviour. Please use the following One-Time Password (OTP) to verify your account:</p>
+    <div style="font-family: Arial, sans-serif; max-width: 500px; margin: auto; padding: 30px; border: 1px solid #e2e8f0; border-radius: 12px; background: #f8fafc;">
+        <h2 style="color: #1e293b; text-align: center;">The Saviour System</h2>
+        <p style="color: #475569;">Your OTP verification code:</p>
         <div style="text-align: center; margin: 30px 0;">
             <span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #1e293b; background: #f1f5f9; padding: 10px 20px; border-radius: 8px;">{otp}</span>
         </div>
@@ -128,106 +125,107 @@ def send_otp_email(email: str, otp: str):
         print(f"✅ OTP sent successfully to {email}")
     except Exception as e:
         print(f"❌ Error sending email to {email}: {e}")
-        print(f"💡 DEBUG: Your OTP for {email} is: {otp}")
-        # In a real app, you might want to log this properly
+        print(f"💡 DEBUG: OTP for {email} is: {otp}")
 
 # --- Routes ---
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    return {"status": "ok", "db": "connected" if db else "not connected"}
 
 @app.get("/")
 async def index(request: Request):
     try:
-        # Explicitly pass request as a keyword argument to fix the 'unhashable type: dict' error
         return templates.TemplateResponse(
-            request=request, 
-            name="index.html", 
+            request=request,
+            name="index.html",
             context={"request": request}
         )
     except Exception as e:
-        return {"error": str(e), "path": str(BASE_DIR / "templates")}
+        return {"message": "Guardian AI Registration System is running", "error": str(e)}
 
 @app.post("/api/v1/auth/register")
 async def register(user: UserRegister, background_tasks: BackgroundTasks):
-    # Check if email already exists
-    users = load_users()
-    if any(u["email"] == user.email for u in users):
-        raise HTTPException(status_code=400, detail="Email already registered")
-    
+    # Check if email already exists in MongoDB
+    if db:
+        existing = await db.users.find_one({"email": user.email})
+        if existing:
+            raise HTTPException(status_code=400, detail="Email already registered")
+    elif user.email in pending_users:
+        raise HTTPException(status_code=400, detail="Registration already in progress for this email")
+
     # Generate 6-digit OTP
     otp = str(random.randint(100000, 999999))
-    
+
     # Hash password
     hashed_password = pwd_context.hash(user.password)
-    
+
     # Store in pending storage (expires in 10 mins)
     pending_users[user.email] = {
         "fullname": user.fullname,
+        "username": user.username,
         "email": user.email,
         "password": hashed_password,
+        "role": user.role,
         "otp": otp,
         "expires_at": datetime.now() + timedelta(minutes=10)
     }
-    
-    # Send email in background to keep response fast
+
+    # Send OTP email in background
     background_tasks.add_task(send_otp_email, user.email, otp)
-    
+
     return {"message": "OTP sent to email"}
 
 @app.post("/api/v1/auth/verify-otp")
 async def verify_otp(data: OTPVerify):
     email = data.email
     otp = data.otp
-    
+
     if email not in pending_users:
-        raise HTTPException(status_code=400, detail="Session expired or not found")
-    
+        raise HTTPException(status_code=400, detail="Session expired or not found. Please register again.")
+
     user_info = pending_users[email]
-    
-    # Check if OTP matches
+
     if user_info["otp"] != otp:
         raise HTTPException(status_code=400, detail="Invalid OTP")
-    
-    # Check expiry
+
     if datetime.now() > user_info["expires_at"]:
         del pending_users[email]
         raise HTTPException(status_code=400, detail="OTP expired. Please resend.")
-    
-    # Success: Save to users.json
-    save_user({
-        "fullname": user_info["fullname"],
-        "email": user_info["email"],
-        "password": user_info["password"],
-        "created_at": str(datetime.now())
-    })
-    
-    # Clean up pending data
+
+    # Save to MongoDB
+    if db:
+        await db.users.insert_one({
+            "fullname": user_info["fullname"],
+            "username": user_info["username"],
+            "email": user_info["email"],
+            "password": user_info["password"],
+            "role": user_info["role"],
+            "created_at": datetime.now().isoformat()
+        })
+        print(f"✅ User {email} saved to MongoDB")
+    else:
+        print(f"⚠️ No DB: User {email} registered in memory only (not persistent)")
+
     del pending_users[email]
-    
+
     return {"message": "User verified and registered successfully"}
 
 @app.post("/api/v1/auth/resend-otp")
 async def resend_otp(data: ResendOTP, background_tasks: BackgroundTasks):
     email = data.email
-    
+
     if email not in pending_users:
-        raise HTTPException(status_code=400, detail="Registration session not found")
-    
-    # Generate new OTP
+        raise HTTPException(status_code=400, detail="Registration session not found. Please register again.")
+
     otp = str(random.randint(100000, 999999))
     pending_users[email]["otp"] = otp
     pending_users[email]["expires_at"] = datetime.now() + timedelta(minutes=10)
-    
+
     background_tasks.add_task(send_otp_email, email, otp)
-    
+
     return {"message": "New OTP sent"}
 
 if __name__ == "__main__":
     import uvicorn
-    import os
-    # Render automatically sets the PORT environment variable
     port = int(os.environ.get("PORT", 8000))
-    # 0.0.0.0 allows external connections (required for Render)
     uvicorn.run(app, host="0.0.0.0", port=port)
-
