@@ -21,6 +21,11 @@ GMAIL_USER = os.environ.get("GMAIL_USER", "jhondoe.11012@gmail.com")
 GMAIL_APP_PASS = os.environ.get("GMAIL_APP_PASSWORD", "sjxn yoyo pled ehvk")
 MONGO_URI = os.environ.get("MONGO_URI", "")
 
+# --- Startup Diagnostics ---
+print(f"🔧 GMAIL_USER loaded: {GMAIL_USER}")
+print(f"🔧 GMAIL_APP_PASSWORD set: {'YES ✅' if GMAIL_APP_PASS and GMAIL_APP_PASS != 'sjxn yoyo pled ehvk' else 'NO - using default ⚠️'}")
+print(f"🔧 MONGO_URI set: {'YES ✅' if MONGO_URI else 'NO ⚠️'}")
+
 # --- MongoDB Client ---
 client = None
 db = None
@@ -118,14 +123,17 @@ def send_otp_email(email: str, otp: str):
     </div>
     """, subtype="html")
 
+    # Always print OTP to logs for debugging
+    print(f"🔑 OTP GENERATED for {email}: {otp}")
+    
     try:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(GMAIL_USER, GMAIL_APP_PASS)
             server.send_message(msg)
-        print(f"✅ OTP sent successfully to {email}")
+        print(f"✅ OTP email sent successfully to {email}")
     except Exception as e:
-        print(f"❌ Error sending email to {email}: {e}")
-        print(f"💡 DEBUG: OTP for {email} is: {otp}")
+        print(f"❌ Email FAILED for {email}: {type(e).__name__}: {e}")
+        print(f"💡 USE THIS OTP MANUALLY: {otp}")
 
 # --- Routes ---
 @app.get("/health")
