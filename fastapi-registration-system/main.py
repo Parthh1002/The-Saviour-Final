@@ -37,7 +37,10 @@ async def global_exception_handler(request: Request, exc: Exception):
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # For development, allow all. In production, specify the frontend URL.
+    allow_origins=[
+        "http://localhost:3000",
+        "https://the-saviour-frontend.onrender.com",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
