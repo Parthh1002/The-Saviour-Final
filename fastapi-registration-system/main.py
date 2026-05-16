@@ -40,7 +40,7 @@ async def lifespan(app: FastAPI):
     else:
         print("⚠️ No MONGO_URI set. Running without persistent DB.")
     yield
-    if client:
+    if client is not None:
         client.close()
         print("🛑 MongoDB Disconnected.")
 
@@ -149,7 +149,7 @@ def send_otp_email(email: str, otp: str):
 # --- Routes ---
 @app.get("/health")
 async def health():
-    return {"status": "ok", "db": "connected" if db else "not connected"}
+    return {"status": "ok", "db": "connected" if db is not None else "not connected"}
 
 @app.get("/")
 async def index(request: Request):
@@ -164,7 +164,7 @@ async def index(request: Request):
 @app.post("/api/v1/auth/register")
 async def register(user: UserRegister, background_tasks: BackgroundTasks):
     # Check if email already exists in MongoDB
-    if db:
+    if db is not None:
         existing = await db.users.find_one({"email": user.email})
         if existing:
             raise HTTPException(status_code=400, detail="Email already registered")
@@ -211,7 +211,7 @@ async def verify_otp(data: OTPVerify):
         raise HTTPException(status_code=400, detail="OTP expired. Please resend.")
 
     # Save to MongoDB
-    if db:
+    if db is not None:
         await db.users.insert_one({
             "fullname": user_info["fullname"],
             "username": user_info["username"],
