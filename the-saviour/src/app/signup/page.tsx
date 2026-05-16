@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { ShieldCheck, Mail, Lock, User, ArrowRight, Building, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { API_BASE_URL } from "@/config/api";
+import { REGISTRATION_API_URL } from "@/config/api";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -60,10 +60,10 @@ export default function SignupPage() {
         role: "officer"
       };
       
-      console.log("DEBUG: Fetching from:", `${API_BASE_URL}/api/v1/auth/register`);
+      console.log("DEBUG: Fetching from:", `${REGISTRATION_API_URL}/api/v1/auth/register`);
       console.log("DEBUG: Payload:", payload);
 
-      const response = await fetch(`${API_BASE_URL}/api/v1/auth/register`, {
+      const response = await fetch(`${REGISTRATION_API_URL}/api/v1/auth/register`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -87,7 +87,7 @@ export default function SignupPage() {
       console.error("DEBUG: Signup Error Trace:", err);
       
       if (err instanceof TypeError && err.message === "Failed to fetch") {
-        setError(`Cannot connect to server at ${API_BASE_URL}. Possible reasons: 1. Server sleeping on Render (wait 1 min). 2. CORS Block. 3. Network offline.`);
+        setError(`Cannot connect to server at ${REGISTRATION_API_URL}. Possible reasons: 1. Server sleeping on Render (wait 1 min). 2. CORS Block. 3. Network offline.`);
       } else {
         setError(err.message || "An unexpected error occurred during registration.");
       }
@@ -102,7 +102,7 @@ export default function SignupPage() {
     setError("");
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/auth/verify-otp`, {
+      const response = await fetch(`${REGISTRATION_API_URL}/api/v1/auth/verify-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, otp: otp.join("") }),
@@ -123,7 +123,7 @@ export default function SignupPage() {
     if (timer > 0) return;
     setLoading(true);
     try {
-      await fetch(`${API_BASE_URL}/api/v1/auth/resend-otp`, {
+      await fetch(`${REGISTRATION_API_URL}/api/v1/auth/resend-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
