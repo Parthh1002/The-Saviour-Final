@@ -53,7 +53,7 @@ export default function SignupPage() {
 
     try {
       const payload = {
-        full_name: formData.fullname,
+        fullname: formData.fullname,
         username: formData.username,
         email: formData.email,
         password: formData.password,
@@ -77,7 +77,12 @@ export default function SignupPage() {
       console.log("DEBUG: Response Data:", data);
 
       if (!response.ok) {
-        throw new Error(data.detail || `Server error: ${response.status}`);
+        // pydantic validation errors come as array, handle both formats
+        const detail = data.detail;
+        if (Array.isArray(detail)) {
+          throw new Error(detail.map((e: any) => `${e.loc?.slice(-1)[0]}: ${e.msg}`).join(", "));
+        }
+        throw new Error(typeof detail === "string" ? detail : `Server error: ${response.status}`);
       }
 
       setEmail(formData.email);
