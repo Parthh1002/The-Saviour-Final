@@ -1,7 +1,7 @@
 import time
 from datetime import datetime, timedelta
 from typing import List, Optional
-from fastapi import FastAPI, UploadFile, File, BackgroundTasks, WebSocket, HTTPException, Depends, status
+from fastapi import FastAPI, UploadFile, File, BackgroundTasks, WebSocket, HTTPException, Depends, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field
@@ -16,6 +16,7 @@ import json
 import os
 import numpy as np
 import cv2
+from contextlib import asynccontextmanager
 # Heavy imports moved inside functions to prevent OOM on startup
 # from ultralytics import YOLO
 from PIL import Image
@@ -58,10 +59,24 @@ GMAIL_APP_PASS = "sjxnyoyopledehvk" # Cleaned spaces from provided password
 # Temporary storage for pending registrations
 pending_users = {}
 
+# --- Lifespan Manager (Modern Replacement for on_event) ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup Logic
+    print("🚀 System Initializing...")
+    try:
+        await load_model()
+    except Exception as e:
+        print(f"⚠️ Startup Model Load Warning: {e}")
+    yield
+    # Shutdown Logic
+    print("🛑 System Shutting Down...")
+
 app = FastAPI(
     title="The Saviour AI API",
     description="Backend services for AI-Based Wildlife Surveillance System",
-    version="2.1.0"
+    version="2.1.0",
+    lifespan=lifespan
 )
 
 # Load YOLO Model (Lazy Loading to save memory)
@@ -70,7 +85,6 @@ MODEL_PATH_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", 
 MODEL_PATH_LOCAL = os.path.abspath(os.path.join(os.path.dirname(__file__), "models", "best.pt"))
 model = None
 
-@app.on_event("startup")
 async def load_model():
     global model
     
