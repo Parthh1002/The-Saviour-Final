@@ -144,9 +144,8 @@ async def health():
 async def index(request: Request):
     try:
         return templates.TemplateResponse(
-            request=request,
-            name="index.html",
-            context={"request": request}
+            "index.html",
+            {"request": request}
         )
     except Exception as e:
         return {"message": "Guardian AI Registration System is running", "error": str(e)}
