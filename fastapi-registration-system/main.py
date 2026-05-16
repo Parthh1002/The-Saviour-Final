@@ -148,7 +148,7 @@ async def index(request: Request):
     except Exception as e:
         return {"error": str(e), "path": str(BASE_DIR / "templates")}
 
-@app.post("/register")
+@app.post("/api/v1/auth/register")
 async def register(user: UserRegister, background_tasks: BackgroundTasks):
     # Check if email already exists
     users = load_users()
@@ -175,7 +175,7 @@ async def register(user: UserRegister, background_tasks: BackgroundTasks):
     
     return {"message": "OTP sent to email"}
 
-@app.post("/verify-otp")
+@app.post("/api/v1/auth/verify-otp")
 async def verify_otp(data: OTPVerify):
     email = data.email
     otp = data.otp
@@ -207,7 +207,7 @@ async def verify_otp(data: OTPVerify):
     
     return {"message": "User verified and registered successfully"}
 
-@app.post("/resend-otp")
+@app.post("/api/v1/auth/resend-otp")
 async def resend_otp(data: ResendOTP, background_tasks: BackgroundTasks):
     email = data.email
     
